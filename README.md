@@ -1,4 +1,4 @@
-# OK-NOK Image Classifier
+# ResNet-18 Visual Inspection Classifier
 
 Image classification pipeline using a fine-tuned **ResNet-18** model to classify industrial component images as **OK** or **NOK**.
 
@@ -85,7 +85,7 @@ Validation and inference images are resized and normalized without random augmen
 ## Project Structure
 
 ```text
-OK-NOK-image-classifier/
+resnet18-visual-inspection-classifier/
 ├── data/
 │   ├── OK_01.jpg
 │   ├── OK_02.jpg
@@ -195,7 +195,7 @@ The number of folds and maximum epochs can be configured in `train.py`.
 
 After training, a saved checkpoint can be loaded and used to classify an image.
 
-The model outputs a probability distribution using Softmax:
+The model outputs class probabilities using Softmax:
 
 ```text
 Image
@@ -209,25 +209,25 @@ OK / NOK
 Confidence Score
 ```
 
-OpenCV is used to visualize the result.
+OpenCV is used to visualize the classification result.
 
 Example output:
 
 ```text
-OK: Correct Side (98.7%)
+OK: Correct Side
 ```
 
 or:
 
 ```text
-NOK: WRONG SIDE (96.2%)
+NOK: WRONG SIDE
 ```
 
-A green border represents an **OK** prediction and a red border represents **NOK**.
+A green border represents an **OK** prediction and a red border represents **NOK**. The predicted confidence is also displayed on the image.
 
 ## ONNX Export
 
-The trained model can also be exported to ONNX using:
+The trained model can be exported to ONNX using:
 
 ```text
 Helping Tools/convert_onnx.py
@@ -239,9 +239,9 @@ This allows the model to be used outside the original PyTorch training environme
 
 The project uses Stratified K-Fold cross-validation to evaluate the model while maintaining the class distribution across folds.
 
-Validation accuracy and validation loss are tracked during training, and the best-performing checkpoint for each fold is saved.
+Validation accuracy and validation loss are tracked during training, and the checkpoint with the lowest validation loss for each fold is saved.
 
-> Final evaluation results can be added here after training on the final dataset.
+Final evaluation metrics can be added after training on the final dataset.
 
 ## Requirements
 
@@ -254,7 +254,3 @@ Validation accuracy and validation loss are tracked during training, and the bes
 - Pillow
 
 See `requirements.txt` for the required Python packages.
-
-## License
-
-This project is available under the MIT License.
