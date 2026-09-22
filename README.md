@@ -1,61 +1,86 @@
 # OK-NOK Image Classifier
 
-A simple image classification project that uses a **ResNet-18** model to classify images as **OK** or **NOK**.
+Image classification pipeline using a fine-tuned **ResNet-18** model to classify industrial component images as **OK** or **NOK**.
 
-The idea is straightforward: give the model images of correct and incorrect parts, train it, and then use it to check new images.
+The model was developed for visual inspection, where the orientation or side of a component needs to be classified before further processing.
 
-## Features
+## Overview
 
-- ResNet-18 with transfer learning
-- OK / NOK image classification
+The pipeline covers:
+
+- Dataset preparation
 - Data augmentation
+- ResNet-18 transfer learning and fine-tuning
 - Stratified K-Fold cross-validation
 - Early stopping
-- Confidence score
+- Learning rate scheduling
+- GPU acceleration with CUDA when available
+- Image classification with confidence scores
 - OpenCV result visualization
-
-## How it works
-
-The project has four main steps:
-
-1. Load the images and assign labels based on their filenames.
-2. Train a ResNet-18 model using the images.
-3. Validate the model using K-Fold cross-validation.
-4. Use the trained model to classify a new image and save the result.
-
-Example:
-
-```text
-Image
-  ↓
-ResNet-18
-  ↓
-OK / NOK
-  ↓
-Confidence score
-  ↓
-Result image
-```
+- Live model testing
+- ONNX model export
 
 ## Model
 
-The project uses **ResNet-18**, a relatively small and fast CNN that works well with transfer learning.
+The classifier is based on a ResNet-18 pretrained on ImageNet.
 
-Most of the pre-trained network is kept frozen, while the last layer (`layer4`) and the custom classifier are trained for this specific task.
+The earlier layers of the network are frozen, while `layer4` and a custom classification head are fine-tuned for the OK/NOK classification task.
 
-The classifier is:
+The original fully connected layer is replaced with:
 
 ```text
-Dropout
-   ↓
+ResNet-18 Features
+        ↓
+Dropout (0.2)
+        ↓
 Linear (512 → 128)
-   ↓
+        ↓
 ReLU
-   ↓
-Dropout
-   ↓
+        ↓
+Dropout (0.1)
+        ↓
 Linear (128 → 2)
+        ↓
+     OK / NOK
 ```
+
+## Training Pipeline
+
+Images are loaded from the dataset and assigned labels based on their filenames.
+
+```text
+Images
+   ↓
+Dataset Loading
+   ↓
+Data Augmentation
+   ↓
+Stratified K-Fold Split
+   ↓
+ResNet-18 Fine-Tuning
+   ↓
+Validation
+   ↓
+Best Model Checkpoint
+```
+
+During training, the model is evaluated on the validation fold after every epoch.
+
+The checkpoint with the lowest validation loss is saved for each fold. Training can stop early when validation loss stops improving.
+
+`ReduceLROnPlateau` is used to reduce the learning rate when validation performance stops improving.
+
+## Data Augmentation
+
+Training images are randomly transformed using:
+
+- Rotation
+- Random resized cropping
+- Brightness adjustment
+- Contrast adjustment
+- ImageNet normalization
+
+Validation and inference images are resized and normalized without random augmentation.
 
 ## Project Structure
 
@@ -63,119 +88,172 @@ Linear (128 → 2)
 OK-NOK-image-classifier/
 ├── data/
 │   ├── OK_01.jpg
-│   ├── OK_02.png
+│   ├── OK_02.jpg
 │   ├── NOK_01.jpg
-│   └── NOK_02.png
-├── train_custom.py
+│   └── NOK_02.jpg
+│
+├── Helping Tools/
+│   ├── capture.py
+│   ├── convert_onnx.py
+│   ├── model_testing_live.py
+│   └── rename.py
+│
+├── train.py
 ├── requirements.txt
 └── README.md
 ```
 
-## Installation
+### Helping Tools
 
-You need:
+`capture.py`  
+Utility for image acquisition and dataset collection.
 
-- Python 3.8+
-- PyTorch
-- OpenCV
-- The packages listed in `requirements.txt`
+`rename.py`  
+Utility for preparing and renaming dataset images.
 
-Create a virtual environment:
+`model_testing_live.py`  
+Runs the trained classifier on live images for testing and visual inspection.
 
-```bash
-python -m venv venv
+`convert_onnx.py`  
+Exports the trained PyTorch model to ONNX for use with other inference runtimes and deployment environments.
+
+## Dataset
+
+Training images are stored directly inside the `data/` directory.
+
+The class is determined from the beginning of the filename:
+
+```text
+OK_part1.jpg        → OK
+OK_sample.png       → OK
+
+NOK_part1.jpg       → NOK
+NOK_wrong_side.png  → NOK
 ```
 
-Activate it:
+Supported image formats:
 
-**Windows**
-```bash
-.\venv\Scripts\activate
+```text
+.jpg
+.jpeg
+.png
 ```
 
-**Linux/macOS**
-```bash
-source venv/bin/activate
-```
+## Training
 
-Install the dependencies:
+Install the required dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Preparing the Data
-
-Put the training images inside the `data/` folder.
-
-The filename determines the class:
-
-```text
-OK_part1.png       → OK
-OK_sample.jpg      → OK
-
-NOK_defect1.jpg    → NOK
-NOK_wrong_side.png → NOK
-```
-
-## Running the Project
-
-Run:
+Run the training pipeline:
 
 ```bash
-python train_custom.py
+python train.py
 ```
 
-The script will:
+The script automatically uses CUDA when a compatible GPU is available:
 
-1. Load the images from `data/`.
-2. Split the data for training and validation.
-3. Train the model.
-4. Save the best model checkpoint.
-5. Classify a sample image.
-6. Create an annotated result image.
+```python
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+```
 
-The output will show something similar to:
+During training, the following information is reported for each epoch:
+
+- Training loss
+- Training accuracy
+- Validation loss
+- Validation accuracy
+- Current learning rate
+
+The best checkpoint from each fold is saved as:
 
 ```text
-OK: Correct Side (95%)
+best_model_fold0.pt
+best_model_fold1.pt
+...
 ```
 
-or
-
-```text
-NOK: WRONG SIDE (91%)
-```
-
-## Main Settings
+## Main Training Settings
 
 | Setting | Value |
 |---|---|
-| Model | ResNet-18 |
-| Image size | 480 × 480 |
+| Architecture | ResNet-18 |
+| Input size | 224 × 224 |
 | Optimizer | Adam |
-| Learning rate | 0.001 |
+| Initial learning rate | 0.001 |
 | Batch size | Up to 8 |
-| Maximum epochs | 15 |
-| Early stopping | 5 epochs |
-| Loss | CrossEntropyLoss |
+| Loss function | CrossEntropyLoss |
+| LR scheduler | ReduceLROnPlateau |
+| Early stopping patience | 5 epochs |
+| Pretrained weights | ImageNet |
 
+The number of folds and maximum epochs can be configured in `train.py`.
 
-Note: These can be adjusted to your needs.
+## Inference
 
-## Data Augmentation
+After training, a saved checkpoint can be loaded and used to classify an image.
 
-During training, images can be slightly rotated, cropped, and adjusted for brightness and contrast.
+The model outputs a probability distribution using Softmax:
 
-This helps the model handle small changes in camera position and lighting.
+```text
+Image
+   ↓
+ResNet-18
+   ↓
+Class Probabilities
+   ↓
+OK / NOK
+   ↓
+Confidence Score
+```
 
-## Result Visualization
+OpenCV is used to visualize the result.
 
-OpenCV is used to add a simple result to the image:
+Example output:
 
-- Green border → **OK**
-- Red border → **NOK**
-- Confidence percentage is displayed on the image.
+```text
+OK: Correct Side (98.7%)
+```
+
+or:
+
+```text
+NOK: WRONG SIDE (96.2%)
+```
+
+A green border represents an **OK** prediction and a red border represents **NOK**.
+
+## ONNX Export
+
+The trained model can also be exported to ONNX using:
+
+```text
+Helping Tools/convert_onnx.py
+```
+
+This allows the model to be used outside the original PyTorch training environment and with other inference or deployment runtimes.
+
+## Results
+
+The project uses Stratified K-Fold cross-validation to evaluate the model while maintaining the class distribution across folds.
+
+Validation accuracy and validation loss are tracked during training, and the best-performing checkpoint for each fold is saved.
+
+> Final evaluation results can be added here after training on the final dataset.
+
+## Requirements
+
+- Python 3.8+
+- PyTorch
+- torchvision
+- OpenCV
+- NumPy
+- scikit-learn
+- Pillow
+
+See `requirements.txt` for the required Python packages.
 
 ## License
 
